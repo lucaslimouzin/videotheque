@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self' https://*.cloudinary.com; media-src 'self' blob: https://*.cloudinary.com; connect-src 'self' https://*.cloudinary.com; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' https://upload-widget.cloudinary.com https://widget.cloudinary.com;">
+    <title>Vidéothèque Boogie</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="icon" type="image/svg+xml" href="favicon.svg">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Vidéothèque Boogie</h1>
+            <div class="search-container">
+                <input type="text" id="searchInput" placeholder="Rechercher une vidéo..." aria-label="Rechercher une vidéo">
+                <button id="searchButton" aria-label="Rechercher">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="11" cy="11" r="8"/>
+                        <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                    </svg>
+                </button>
+            </div>
+        </header>
+        <main>
+            <div class="video-list" id="videoList">
+                <!-- Les vidéos seront ajoutées ici dynamiquement -->
+            </div>
+        </main>
+    </div>
+
+    <!-- Bouton d'upload flottant -->
+    <button class="upload-fab" id="uploadButton" aria-label="Ajouter une vidéo">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 5v14M5 12h14"/>
+        </svg>
+    </button>
+
+    <!-- Modal d'upload -->
+    <div class="modal" id="uploadModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Ajouter une vidéo</h2>
+                <button class="close-button" id="closeModal" aria-label="Fermer">×</button>
+            </div>
+            <form id="uploadForm" class="upload-form">
+                <div class="form-group">
+                    <label for="videoTitle">Titre de la vidéo</label>
+                    <input type="text" id="videoTitle" required placeholder="Entrez le titre de la vidéo">
+                </div>
+                <div class="form-group">
+                    <label for="videoFile">Fichier vidéo</label>
+                    <button type="button" id="cloudinaryUpload" class="secondary-button">Sélectionner une vidéo</button>
+                    <div class="file-info">Taille maximale : 100 MB</div>
+                </div>
+                <div class="upload-progress" id="uploadProgress" hidden>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progressFill"></div>
+                    </div>
+                    <div class="progress-text" id="progressText">0%</div>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="secondary-button" id="cancelUpload">Annuler</button>
+                    <button type="submit" class="primary-button" id="submitUpload">Uploader</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Cloudinary Upload Widget -->
+    <script src="https://upload-widget.cloudinary.com/global/all.js"></script>
+    
+    <!-- Configuration Cloudinary -->
+    <script src="cloudinary-config.js"></script>
+    
+    <!-- Notre code -->
+    <script src="app.js"></script>
+</body>
+</html> 
