@@ -84,8 +84,53 @@ function cleanFileName(name) {
         .replace(/^-+|-+$/g, ''); // retire les tirets en début/fin
 }
 
+// Détection mobile simple
+function isMobile() {
+    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+}
+
+// Ajout du bouton pour générer la miniature sur mobile
+let generateThumbBtn = null;
+if (!document.getElementById('generateThumbBtn')) {
+    generateThumbBtn = document.createElement('button');
+    generateThumbBtn.id = 'generateThumbBtn';
+    generateThumbBtn.textContent = 'Générer la miniature';
+    generateThumbBtn.style.display = 'none';
+    generateThumbBtn.style.width = '100%';
+    generateThumbBtn.style.margin = '0.5rem 0';
+    uploadModal.querySelector('.modal-content').insertBefore(generateThumbBtn, uploadButton);
+}
+
+let fileToUpload = null;
+let thumbBlobMobile = null;
+
+videoInput.addEventListener('change', () => {
+    fileToUpload = videoInput.files[0];
+    thumbBlobMobile = null;
+    if (isMobile() && fileToUpload) {
+        generateThumbBtn.style.display = 'block';
+        uploadButton.disabled = true;
+    } else {
+        generateThumbBtn.style.display = 'none';
+        uploadButton.disabled = false;
+    }
+});
+
+generateThumbBtn && generateThumbBtn.addEventListener('click', async () => {
+    if (fileToUpload) {
+        uploadProgress.textContent = 'Génération de la miniature...';
+        try {
+            thumbBlobMobile = await generateThumbnail(fileToUpload);
+            uploadProgress.textContent = 'Miniature générée !';
+            uploadButton.disabled = false;
+        } catch (e) {
+            uploadProgress.textContent = 'Erreur lors de la génération de la miniature.';
+        }
+    }
+});
+
 // Fonction pour uploader une vidéo
-async function uploadVideo(file) {
+async function uploadVideo(file, thumbBlobOverride = null) {
     try {
         uploadProgress.textContent = 'Upload en cours...';
         // Vérifier la taille du fichier (max 50MB)
@@ -99,8 +144,11 @@ async function uploadVideo(file) {
         const safeName = cleanFileName(file.name);
         const fileName = `${timestamp}-${safeName}`;
         // Générer la miniature
-        uploadProgress.textContent = 'Génération de la miniature...';
-        const thumbBlob = await generateThumbnail(file);
+        let thumbBlob = thumbBlobOverride;
+        if (!thumbBlob) {
+            uploadProgress.textContent = 'Génération de la miniature...';
+            thumbBlob = await generateThumbnail(file);
+        }
         const thumbName = `${timestamp}-${safeName.replace(/\.[^/.]+$/, '')}.jpg`;
         // Uploader la miniature
         uploadProgress.textContent = 'Upload de la miniature...';
@@ -235,7 +283,15 @@ async function loadVideos() {
 uploadButton.addEventListener('click', () => {
     const file = videoInput.files[0];
     if (file) {
-        uploadVideo(file);
+        if (isMobile()) {
+            if (!thumbBlobMobile) {
+                uploadProgress.textContent = 'Veuillez générer la miniature.';
+                return;
+            }
+            uploadVideo(file, thumbBlobMobile);
+        } else {
+            uploadVideo(file);
+        }
     } else {
         uploadProgress.textContent = 'Veuillez sélectionner une vidéo';
     }
