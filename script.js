@@ -47,6 +47,31 @@ function hideSplashMin2s() {
     }
 }
 
+// Fonction utilitaire pour générer une miniature (frame 0) à partir d'un fichier vidéo
+async function generateThumbnail(file) {
+    return new Promise((resolve, reject) => {
+        const video = document.createElement('video');
+        video.preload = 'metadata';
+        video.muted = true;
+        video.src = URL.createObjectURL(file);
+        video.currentTime = 0;
+        video.playsInline = true;
+        video.onloadeddata = () => {
+            const canvas = document.createElement('canvas');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            canvas.toBlob(blob => {
+                URL.revokeObjectURL(video.src);
+                if (blob) resolve(blob);
+                else reject(new Error('Impossible de générer la miniature.'));
+            }, 'image/jpeg', 0.8);
+        };
+        video.onerror = (e) => reject(new Error('Erreur lors du chargement de la vidéo pour la miniature.'));
+    });
+}
+
 // Fonction pour uploader une vidéo
 async function uploadVideo(file) {
     try {
@@ -60,7 +85,20 @@ async function uploadVideo(file) {
         // Générer un nom de fichier unique
         const timestamp = Date.now();
         const fileName = `${timestamp}-${file.name}`;
+        // Générer la miniature
+        uploadProgress.textContent = 'Génération de la miniature...';
+        const thumbBlob = await generateThumbnail(file);
+        const thumbName = `${timestamp}-${file.name.replace(/\.[^/.]+$/, '')}.jpg`;
+        // Uploader la miniature
+        uploadProgress.textContent = 'Upload de la miniature...';
+        await supabase.storage
+            .from('videotheque')
+            .upload(thumbName, thumbBlob, {
+                cacheControl: '3600',
+                upsert: true
+            });
         // Uploader la vidéo
+        uploadProgress.textContent = 'Upload de la vidéo...';
         const { data, error } = await supabase.storage
             .from('videotheque')
             .upload(fileName, file, {
@@ -120,7 +158,8 @@ async function loadVideos() {
             return;
         }
         // Filtrer les fichiers vidéo et charger les titres associés
-        const videoFiles = data.filter(f => f.name && !f.name.endsWith('.json'));
+        let videoFiles = data.filter(f => f.name && !f.name.endsWith('.json') && !f.name.endsWith('.jpg'));
+        videoFiles = videoFiles.reverse(); // Afficher la plus récente en premier
         for (const video of videoFiles) {
             const videoUrl = supabase.storage
                 .from('videotheque')
@@ -138,15 +177,22 @@ async function loadVideos() {
                     if (meta.title) title = meta.title;
                 }
             } catch (e) {}
+            // Chercher la miniature
+            const thumbName = `${video.name.replace(/\.[^/.]+$/, '')}.jpg`;
+            const thumbUrl = supabase.storage
+                .from('videotheque')
+                .getPublicUrl(thumbName);
             const videoCard = document.createElement('div');
             videoCard.className = 'video-card';
             videoCard.innerHTML = `
-                <video controls>
+                <div class="video-info">
+                    <h3>${title}</h3>
+                </div>
+                <video controls poster="${thumbUrl.data.publicUrl}">
                     <source src="${videoUrl.data.publicUrl}" type="video/mp4">
                     Votre navigateur ne supporte pas la lecture de vidéos.
                 </video>
                 <div class="video-info">
-                    <h3>${title}</h3>
                     <button class="delete-video" data-videoname="${video.name}" data-metaname="${metaName}" title="Supprimer la vidéo">🗑️</button>
                 </div>
             `;
