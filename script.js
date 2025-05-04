@@ -54,9 +54,11 @@ async function generateThumbnail(file) {
         video.preload = 'metadata';
         video.muted = true;
         video.src = URL.createObjectURL(file);
-        video.currentTime = 0;
         video.playsInline = true;
         video.onloadeddata = () => {
+            video.currentTime = 0;
+        };
+        video.onseeked = () => {
             const canvas = document.createElement('canvas');
             canvas.width = video.videoWidth;
             canvas.height = video.videoHeight;
@@ -72,6 +74,16 @@ async function generateThumbnail(file) {
     });
 }
 
+// Fonction utilitaire pour nettoyer le nom de fichier (Supabase safe)
+function cleanFileName(name) {
+    // Retire les accents et caractères spéciaux, remplace les espaces par des tirets
+    return name
+        .normalize('NFD').replace(/[00-\u036f]/g, '') // retire les accents
+        .replace(/[^a-zA-Z0-9.\-_]/g, '-') // remplace les caractères spéciaux par des tirets
+        .replace(/-+/g, '-') // évite les doubles tirets
+        .replace(/^-+|-+$/g, ''); // retire les tirets en début/fin
+}
+
 // Fonction pour uploader une vidéo
 async function uploadVideo(file) {
     try {
@@ -82,13 +94,14 @@ async function uploadVideo(file) {
         }
         // Récupérer le titre
         const title = videoTitleInput.value.trim() || file.name;
-        // Générer un nom de fichier unique
+        // Générer un nom de fichier unique et propre
         const timestamp = Date.now();
-        const fileName = `${timestamp}-${file.name}`;
+        const safeName = cleanFileName(file.name);
+        const fileName = `${timestamp}-${safeName}`;
         // Générer la miniature
         uploadProgress.textContent = 'Génération de la miniature...';
         const thumbBlob = await generateThumbnail(file);
-        const thumbName = `${timestamp}-${file.name.replace(/\.[^/.]+$/, '')}.jpg`;
+        const thumbName = `${timestamp}-${safeName.replace(/\.[^/.]+$/, '')}.jpg`;
         // Uploader la miniature
         uploadProgress.textContent = 'Upload de la miniature...';
         await supabase.storage
@@ -113,7 +126,7 @@ async function uploadVideo(file) {
             throw error;
         }
         // Uploader le titre dans un fichier JSON à côté de la vidéo
-        const metaName = `${timestamp}-${file.name}.json`;
+        const metaName = `${timestamp}-${safeName}.json`;
         const metaContent = JSON.stringify({ title });
         await supabase.storage
             .from('videotheque')
@@ -182,13 +195,14 @@ async function loadVideos() {
             const thumbUrl = supabase.storage
                 .from('videotheque')
                 .getPublicUrl(thumbName);
+            console.log('Miniature pour', video.name, ':', thumbUrl.data.publicUrl); // DEBUG
             const videoCard = document.createElement('div');
             videoCard.className = 'video-card';
             videoCard.innerHTML = `
                 <div class="video-info">
                     <h3>${title}</h3>
                 </div>
-                <video controls poster="${thumbUrl.data.publicUrl}">
+                <video controls poster="${thumbUrl.data.publicUrl || ''}">
                     <source src="${videoUrl.data.publicUrl}" type="video/mp4">
                     Votre navigateur ne supporte pas la lecture de vidéos.
                 </video>
