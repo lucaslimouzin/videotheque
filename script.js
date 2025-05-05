@@ -47,88 +47,6 @@ function hideSplashMin2s() {
     }
 }
 
-// Fonction utilitaire pour générer une miniature (frame 0) à partir d'un fichier vidéo
-async function generateThumbnail(file) {
-    return new Promise((resolve, reject) => {
-        const video = document.createElement('video');
-        video.preload = 'metadata';
-        video.muted = true;
-        video.src = URL.createObjectURL(file);
-        video.playsInline = true;
-        video.onloadeddata = () => {
-            video.currentTime = 0;
-        };
-        video.onseeked = () => {
-            const canvas = document.createElement('canvas');
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-            canvas.toBlob(blob => {
-                URL.revokeObjectURL(video.src);
-                if (blob) resolve(blob);
-                else reject(new Error('Impossible de générer la miniature.'));
-            }, 'image/jpeg', 0.8);
-        };
-        video.onerror = (e) => reject(new Error('Erreur lors du chargement de la vidéo pour la miniature.'));
-    });
-}
-
-// Fonction utilitaire pour nettoyer le nom de fichier (Supabase safe)
-function cleanFileName(name) {
-    // Retire les accents et caractères spéciaux, remplace les espaces par des tirets
-    return name
-        .normalize('NFD').replace(/[00-\u036f]/g, '') // retire les accents
-        .replace(/[^a-zA-Z0-9.\-_]/g, '-') // remplace les caractères spéciaux par des tirets
-        .replace(/-+/g, '-') // évite les doubles tirets
-        .replace(/^-+|-+$/g, ''); // retire les tirets en début/fin
-}
-
-// Détection mobile simple
-function isMobile() {
-    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-}
-
-// Ajout du bouton pour générer la miniature sur mobile
-let generateThumbBtn = null;
-if (!document.getElementById('generateThumbBtn')) {
-    generateThumbBtn = document.createElement('button');
-    generateThumbBtn.id = 'generateThumbBtn';
-    generateThumbBtn.textContent = 'Générer la miniature';
-    generateThumbBtn.style.display = 'none';
-    generateThumbBtn.style.width = '100%';
-    generateThumbBtn.style.margin = '0.5rem 0';
-    uploadModal.querySelector('.modal-content').insertBefore(generateThumbBtn, uploadButton);
-}
-
-let fileToUpload = null;
-let thumbBlobMobile = null;
-
-videoInput.addEventListener('change', () => {
-    fileToUpload = videoInput.files[0];
-    thumbBlobMobile = null;
-    if (isMobile() && fileToUpload) {
-        generateThumbBtn.style.display = 'block';
-        uploadButton.disabled = true;
-    } else {
-        generateThumbBtn.style.display = 'none';
-        uploadButton.disabled = false;
-    }
-});
-
-generateThumbBtn && generateThumbBtn.addEventListener('click', async () => {
-    if (fileToUpload) {
-        uploadProgress.textContent = 'Génération de la miniature...';
-        try {
-            thumbBlobMobile = await generateThumbnail(fileToUpload);
-            uploadProgress.textContent = 'Miniature générée !';
-            uploadButton.disabled = false;
-        } catch (e) {
-            uploadProgress.textContent = 'Erreur lors de la génération de la miniature.';
-        }
-    }
-});
-
 // Fonction pour uploader une vidéo
 async function uploadVideo(file) {
     try {
@@ -139,13 +57,10 @@ async function uploadVideo(file) {
         }
         // Récupérer le titre
         const title = videoTitleInput.value.trim() || file.name;
-        // Générer un nom de fichier unique et propre
+        // Générer un nom de fichier unique
         const timestamp = Date.now();
-        const safeName = cleanFileName(file.name);
-        const fileName = `${timestamp}-${safeName}`;
-
+        const fileName = `${timestamp}-${file.name}`;
         // Uploader la vidéo
-        uploadProgress.textContent = 'Upload de la vidéo...';
         const { data, error } = await supabase.storage
             .from('videotheque')
             .upload(fileName, file, {
@@ -159,9 +74,8 @@ async function uploadVideo(file) {
             }
             throw error;
         }
-
         // Uploader le titre dans un fichier JSON à côté de la vidéo
-        const metaName = `${timestamp}-${safeName}.json`;
+        const metaName = `${timestamp}-${file.name}.json`;
         const metaContent = JSON.stringify({ title });
         await supabase.storage
             .from('videotheque')
@@ -169,7 +83,6 @@ async function uploadVideo(file) {
                 cacheControl: '3600',
                 upsert: true
             });
-
         uploadProgress.textContent = 'Upload réussi !';
         setTimeout(() => {
             uploadModal.classList.remove('show');
@@ -183,56 +96,35 @@ async function uploadVideo(file) {
     }
 }
 
-// Fonction pour générer une miniature à partir d'une URL vidéo
-async function generateThumbnailFromUrl(videoUrl) {
-    return new Promise((resolve, reject) => {
-        const video = document.createElement('video');
-        video.preload = 'metadata';
-        video.muted = true;
-        video.src = videoUrl;
-        video.playsInline = true;
-        
-        video.onloadeddata = () => {
-            video.currentTime = 1; // On se positionne à 1 seconde
-        };
-        
-        video.onseeked = () => {
-            const canvas = document.createElement('canvas');
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-            canvas.toBlob(blob => {
-                URL.revokeObjectURL(video.src);
-                if (blob) resolve(blob);
-                else reject(new Error('Impossible de générer la miniature.'));
-            }, 'image/jpeg', 0.8);
-        };
-        
-        video.onerror = (e) => reject(new Error('Erreur lors du chargement de la vidéo pour la miniature.'));
-    });
-}
-
 // Fonction pour charger et afficher les vidéos
 async function loadVideos() {
     try {
-        const { data: videoFiles, error } = await supabase.storage
+        const { data, error } = await supabase.storage
             .from('videotheque')
             .list('', {
-                sortBy: { column: 'name', order: 'desc' }
+                limit: 100,
+                offset: 0,
+                sortBy: { column: 'name', order: 'asc' }
             });
-
-        if (error) throw error;
-
+        if (error) {
+            console.error('Détails de l\'erreur:', error);
+            if (error.statusCode === 403) {
+                throw new Error('Erreur de permission. Vérifiez les politiques de sécurité dans Supabase.');
+            }
+            throw error;
+        }
         videosList.innerHTML = '';
-        // Afficher la plus récente en premier
+        if (data.length === 0) {
+            videosList.innerHTML = '<p>Aucune vidéo disponible.</p>';
+            hideSplashMin2s();
+            return;
+        }
+        // Filtrer les fichiers vidéo et charger les titres associés
+        const videoFiles = data.filter(f => f.name && !f.name.endsWith('.json'));
         for (const video of videoFiles) {
-            if (!video.name.endsWith('.mp4')) continue;
-            
             const videoUrl = supabase.storage
                 .from('videotheque')
                 .getPublicUrl(video.name);
-            
             // Chercher le fichier meta
             const metaName = `${video.name}.json`;
             let title = video.name;
@@ -246,50 +138,15 @@ async function loadVideos() {
                     if (meta.title) title = meta.title;
                 }
             } catch (e) {}
-            
-            // Chercher la miniature
-            const thumbName = `${video.name.replace(/\.[^/.]+$/, '')}.jpg`;
-            let thumbUrl = supabase.storage
-                .from('videotheque')
-                .getPublicUrl(thumbName);
-
-            // Si la miniature n'existe pas, on la génère
-            try {
-                const { data: thumbExists } = await supabase.storage
-                    .from('videotheque')
-                    .download(thumbName);
-                
-                if (!thumbExists) {
-                    try {
-                        const thumbBlob = await generateThumbnailFromUrl(videoUrl.data.publicUrl);
-                        await supabase.storage
-                            .from('videotheque')
-                            .upload(thumbName, thumbBlob, {
-                                cacheControl: '3600',
-                                upsert: true
-                            });
-                        thumbUrl = supabase.storage
-                            .from('videotheque')
-                            .getPublicUrl(thumbName);
-                    } catch (e) {
-                        console.error('Erreur lors de la génération de la miniature:', e);
-                    }
-                }
-            } catch (e) {
-                console.error('Erreur lors de la vérification de la miniature:', e);
-            }
-            
             const videoCard = document.createElement('div');
             videoCard.className = 'video-card';
             videoCard.innerHTML = `
-                <div class="video-info">
-                    <h3>${title}</h3>
-                </div>
-                <video controls poster="${thumbUrl.data.publicUrl || 'splash-image.png'}">
+                <video controls>
                     <source src="${videoUrl.data.publicUrl}" type="video/mp4">
                     Votre navigateur ne supporte pas la lecture de vidéos.
                 </video>
                 <div class="video-info">
+                    <h3>${title}</h3>
                     <button class="delete-video" data-videoname="${video.name}" data-metaname="${metaName}" title="Supprimer la vidéo">🗑️</button>
                 </div>
             `;
